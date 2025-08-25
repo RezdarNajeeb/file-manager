@@ -41,7 +41,7 @@ class FileManager {
         this.uppy.use(Tus, {
             endpoint: window.routes.tusUpload,
             removeFingerprintOnSuccess: false,
-            chunkSize: 1024 * 1024, // 1MB chunks for better resumability
+            chunkSize: 50 * 1024 * 1024, // 50MB chunks: good balance for most use cases
             parallelUploads: 1, // Upload files one at a time for stability
             storeFingerprintForResuming: true, // Store fingerprints to enable resume
             headers: {

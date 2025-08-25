@@ -6,9 +6,6 @@ use Illuminate\Support\Facades\Route;
 
 Route::get('/', [FileController::class, 'index'])->name('files.index');
 
-// Debug route for testing TUS endpoint
-Route::get('/debug/tus', [DebugController::class, 'testTus'])->name('debug.tus');
-
 // File management routes
 Route::controller(FileController::class)->group(function () {
     Route::get('/files', 'getFiles')->name('files.list');

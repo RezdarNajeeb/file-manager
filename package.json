@@ -6,6 +6,12 @@
         "build": "vite build",
         "dev": "vite"
     },
+    "dependencies": {
+        "@uppy/core": "^4.0.0",
+        "@uppy/dashboard": "^4.0.0",
+        "@uppy/tus": "^4.0.0",
+        "@uppy/xhr-upload": "^4.0.0"
+    },
     "devDependencies": {
         "@tailwindcss/vite": "^4.0.0",
         "axios": "^1.11.0",

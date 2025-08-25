@@ -10,7 +10,7 @@ A robust Laravel application for handling large file uploads with resumable capa
 - **Real-time Progress**: Live upload progress tracking with WebSocket-like updates
 - **Download Resume**: Supports HTTP range requests for resumable downloads
 - **File Management**: Complete CRUD operations for uploaded files
-- **Database Sync**: Command to synchronize files between MinIO and database
+- **Database Sync**: Automated command runs every minute to synchronize files between MinIO and database
 - **Modern UI**: Dark-themed responsive interface built with Tailwind CSS
 - **Testing Suite**: Comprehensive test coverage for all major features
 
@@ -78,6 +78,9 @@ A robust Laravel application for handling large file uploads with resumable capa
    
    # Run database migrations
    ./vendor/bin/sail artisan migrate
+   
+   # Start the Laravel scheduler (for automated file sync)
+   ./vendor/bin/sail artisan schedule:work &
    
    # Build frontend assets
    ./vendor/bin/sail npm run build
@@ -156,7 +159,10 @@ GET  /upload/progress/{tusId}   # Upload progress by TUS ID
 # Start development environment with hot reload
 composer run dev
 
-# Sync files between MinIO and database
+# Start Laravel scheduler worker (for automated file sync)
+./vendor/bin/sail artisan schedule:work
+
+# Manually sync files between MinIO and database
 ./vendor/bin/sail artisan files:sync
 
 # Clear application cache
@@ -164,6 +170,27 @@ composer run dev
 ./vendor/bin/sail artisan config:clear
 ./vendor/bin/sail artisan view:clear
 ```
+
+### Automated File Synchronization
+
+The `files:sync` command runs automatically every minute using Laravel's scheduler to ensure consistency between MinIO storage and the database. This process:
+
+- Adds new files found in MinIO to the database
+- Removes database records for files no longer in storage
+- Maintains data integrity without manual intervention
+- Uses `withoutOverlapping()` to prevent concurrent sync operations
+
+The scheduler is configured in `bootstrap/app.php` and requires the scheduler worker to be running:
+
+```bash
+# Start the Laravel scheduler worker (required for automated sync)
+./vendor/bin/sail artisan schedule:work
+
+# Or run in the background
+./vendor/bin/sail artisan schedule:work > /dev/null 2>&1 &
+```
+
+**Note**: The `schedule:work` command must be running for the automated sync to work. In production, use a process manager like Supervisor to ensure it stays running.
 
 ## Architecture
 
@@ -254,7 +281,8 @@ The application includes health checks for:
 - Verify PHP upload limits in php.ini
 
 **Files not appearing after upload**
-- Run `artisan files:sync` to reconcile storage
+- Wait up to 1 minute for automatic sync, or run `artisan files:sync` manually
+- Ensure `schedule:work` is running for automated sync
 - Check MinIO bucket permissions
 - Verify database connection
 

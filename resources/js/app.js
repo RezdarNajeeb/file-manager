@@ -5,6 +5,7 @@ class FileManager {
     constructor() {
         this.uppy = null
         this.refreshInterval = null
+        this.uploadCompletionTimeout = null
         this.init()
     }
 
@@ -35,37 +36,49 @@ class FileManager {
             showRemoveButtonAfterComplete: true,
             showSelectedFiles: true,
             proudlyDisplayPoweredByUppy: false,
+            theme: 'dark', // Set dark theme
         })
 
         // Add TUS plugin for resumable uploads
         this.uppy.use(Tus, {
             endpoint: window.routes.tusUpload,
             removeFingerprintOnSuccess: false,
-            chunkSize: 50 * 1024 * 1024, // 50MB chunks: good balance for most use cases
+            chunkSize: 50 * 1024 * 1024, // 50MB chunks
             parallelUploads: 1, // Upload files one at a time for stability
-            storeFingerprintForResuming: true, // Store fingerprints to enable resume
+            storeFingerprintForResuming: true,
+            retryDelays: [0, 1000, 3000, 5000], // Retry delays in ms
             headers: {
                 'X-CSRF-TOKEN': window.Laravel.csrfToken,
             },
+            // Add upload completion callback
+            onSuccess: (file, response) => {
+                console.log('TUS upload completed:', file.name, response)
+                this.scheduleRefresh()
+            },
+            onError: (error, file, response) => {
+                console.error('TUS upload error:', error, file, response)
+            }
         })
 
         // Event listeners for upload events
         this.uppy.on('upload', () => {
             console.log('Upload started')
+            this.showLoading()
         })
 
         this.uppy.on('upload-success', (file, response) => {
             console.log('Upload successful:', file.name, response)
-            this.refreshFilesList()
+            // Schedule a delayed refresh to ensure database is updated
+            this.scheduleRefresh()
         })
 
         this.uppy.on('upload-error', (file, error) => {
             console.error('Upload error:', file.name, error)
             this.showNotification('Upload failed: ' + error.message, 'error')
+            this.hideLoading()
         })
 
         this.uppy.on('upload-progress', (file, progress) => {
-            // Update progress in real-time if needed
             console.log(
                 'Upload progress:',
                 file.name,
@@ -75,10 +88,21 @@ class FileManager {
 
         this.uppy.on('complete', (result) => {
             console.log('Upload complete:', result)
+            this.hideLoading()
+
             if (result.successful.length > 0) {
                 this.showNotification(
                     `Successfully uploaded ${result.successful.length} file(s)`,
                     'success'
+                )
+                // Force refresh after a short delay to allow server processing
+                this.scheduleRefresh(3000)
+            }
+
+            if (result.failed.length > 0) {
+                this.showNotification(
+                    `Failed to upload ${result.failed.length} file(s)`,
+                    'error'
                 )
             }
         })
@@ -87,11 +111,13 @@ class FileManager {
         this.uppy.on('error', (error) => {
             console.error('Uppy error:', error)
             this.showNotification('Upload error: ' + error.message, 'error')
+            this.hideLoading()
         })
 
         // Add retry handling
         this.uppy.on('retry-all', () => {
             console.log('Retrying all failed uploads')
+            this.showLoading()
         })
     }
 
@@ -100,7 +126,7 @@ class FileManager {
         document
             .getElementById('refresh-files')
             ?.addEventListener('click', () => {
-                this.refreshFilesList()
+                this.refreshFilesList(true) // Force refresh with cache busting
             })
 
         // Setup CSRF token for AJAX requests
@@ -118,24 +144,49 @@ class FileManager {
         }, 30000)
     }
 
-    async refreshFilesList() {
+    scheduleRefresh(delay = 1500) {
+        // Clear any existing scheduled refresh
+        if (this.uploadCompletionTimeout) {
+            clearTimeout(this.uploadCompletionTimeout)
+        }
+
+        // Schedule refresh with delay
+        this.uploadCompletionTimeout = setTimeout(() => {
+            this.refreshFilesList(true) // Force refresh after upload
+        }, delay)
+    }
+
+    async refreshFilesList(forceCacheBust = false) {
         try {
-            const response = await fetch(window.routes.filesList, {
+            // Add cache busting parameter to prevent browser caching issues
+            const url = new URL(window.routes.filesList, window.location.origin)
+            if (forceCacheBust) {
+                url.searchParams.append('_t', Date.now())
+            }
+
+            const response = await fetch(url.toString(), {
                 headers: {
                     Accept: 'application/json',
                     'X-CSRF-TOKEN': window.Laravel.csrfToken,
+                    'Cache-Control': 'no-cache, no-store, must-revalidate',
+                    'Pragma': 'no-cache',
+                    'Expires': '0'
                 },
             })
 
             if (!response.ok) {
-                throw new Error('Failed to fetch files')
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`)
             }
 
             const data = await response.json()
             this.updateFilesTable(data.data)
+
+            if (forceCacheBust) {
+                this.showNotification('Files list refreshed', 'success')
+            }
         } catch (error) {
             console.error('Error refreshing files:', error)
-            this.showNotification('Failed to refresh files list', 'error')
+            this.showNotification('Failed to refresh files list: ' + error.message, 'error')
         }
     }
 
@@ -145,8 +196,8 @@ class FileManager {
 
         if (files.length === 0) {
             tbody.innerHTML = `
-                <tr>
-                    <td colspan="6" class="px-6 py-8 text-center text-gray-500">
+                <tr class="border-gray-700">
+                    <td colspan="6" class="px-6 py-8 text-center text-gray-400">
                         No files uploaded yet
                     </td>
                 </tr>
@@ -157,52 +208,52 @@ class FileManager {
         tbody.innerHTML = files
             .map(
                 (file) => `
-            <tr data-file-id="${file.id}">
+            <tr data-file-id="${file.id}" class="border-gray-700 hover:bg-gray-800 transition-colors">
                 <td class="px-6 py-4 whitespace-nowrap">
-                    <div class="text-sm font-medium text-gray-900">
+                    <div class="text-sm font-medium text-gray-100">
                         ${this.escapeHtml(file.filename)}
                     </div>
                 </td>
-                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
                     ${file.file_size}
                 </td>
                 <td class="px-6 py-4 whitespace-nowrap">
                     <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full
                         ${
-                            file.status === 'completed'
-                                ? 'bg-green-100 text-green-800'
-                                : file.status === 'uploading'
-                                  ? 'bg-yellow-100 text-yellow-800'
-                                  : 'bg-red-100 text-red-800'
-                        }">
+                    file.status === 'completed'
+                        ? 'bg-green-900 text-green-200 border border-green-700'
+                        : file.status === 'uploading'
+                            ? 'bg-yellow-900 text-yellow-200 border border-yellow-700'
+                            : 'bg-red-900 text-red-200 border border-red-700'
+                }">
                         ${file.status.charAt(0).toUpperCase() + file.status.slice(1)}
                     </span>
                 </td>
                 <td class="px-6 py-4 whitespace-nowrap">
-                    <div class="w-full bg-gray-200 rounded-full h-2">
+                    <div class="w-full bg-gray-700 rounded-full h-2">
                         <div class="bg-blue-500 h-2 rounded-full transition-all duration-300"
                              style="width: ${file.progress}%">
                         </div>
                     </div>
-                    <span class="text-xs text-gray-500 mt-1">${file.progress.toFixed(1)}%</span>
+                    <span class="text-xs text-gray-400 mt-1">${file.progress.toFixed(1)}%</span>
                 </td>
-                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
                     ${file.created_at}
                 </td>
                 <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
                     ${
-                        file.download_url
-                            ? `
+                    file.download_url
+                        ? `
                         <a href="${file.download_url}"
-                           class="text-blue-600 hover:text-blue-900 mr-3">
+                           class="text-blue-400 hover:text-blue-300 mr-3 transition-colors">
                             Download
                         </a>
                     `
-                            : ''
-                    }
+                        : ''
+                }
                     <button
                         onclick="deleteFile(${file.id})"
-                        class="text-red-600 hover:text-red-900">
+                        class="text-red-400 hover:text-red-300 transition-colors">
                         Delete
                     </button>
                 </td>
@@ -219,14 +270,14 @@ class FileManager {
     }
 
     showNotification(message, type = 'info') {
-        // Simple notification system
+        // Simple notification system with dark theme
         const notification = document.createElement('div')
-        notification.className = `fixed top-4 right-4 px-6 py-3 rounded-lg shadow-lg z-50 transition-all duration-300 transform translate-x-full ${
+        notification.className = `fixed top-4 right-4 px-6 py-3 rounded-lg shadow-lg z-1000 transition-all duration-300 transform translate-x-full ${
             type === 'success'
-                ? 'bg-green-500 text-white'
+                ? 'bg-green-600 text-white border border-green-500'
                 : type === 'error'
-                  ? 'bg-red-500 text-white'
-                  : 'bg-blue-500 text-white'
+                    ? 'bg-red-600 text-white border border-red-500'
+                    : 'bg-blue-600 text-white border border-blue-500'
         }`
         notification.textContent = message
 
@@ -260,19 +311,24 @@ class FileManager {
         if (this.refreshInterval) {
             clearInterval(this.refreshInterval)
         }
+        if (this.uploadCompletionTimeout) {
+            clearTimeout(this.uploadCompletionTimeout)
+        }
         if (this.uppy) {
             this.uppy.destroy()
         }
     }
 }
 
-// Global delete function
+// Global delete function with improved error handling
 window.deleteFile = async function (fileId) {
     if (!confirm('Are you sure you want to delete this file?')) {
         return
     }
 
     try {
+        window.fileManager.showLoading()
+
         const response = await fetch(
             window.routes.filesDestroy.replace(':id', fileId),
             {
@@ -280,12 +336,14 @@ window.deleteFile = async function (fileId) {
                 headers: {
                     Accept: 'application/json',
                     'X-CSRF-TOKEN': window.Laravel.csrfToken,
+                    'Cache-Control': 'no-cache'
                 },
             }
         )
 
         if (!response.ok) {
-            throw new Error('Failed to delete file')
+            const errorData = await response.json().catch(() => ({}))
+            throw new Error(errorData.message || `HTTP ${response.status}`)
         }
 
         // Remove the row from table
@@ -298,9 +356,17 @@ window.deleteFile = async function (fileId) {
             'File deleted successfully',
             'success'
         )
+
+        // Refresh the list to ensure consistency
+        setTimeout(() => {
+            window.fileManager.refreshFilesList(true)
+        }, 500)
+
     } catch (error) {
         console.error('Error deleting file:', error)
-        window.fileManager.showNotification('Failed to delete file', 'error')
+        window.fileManager.showNotification('Failed to delete file: ' + error.message, 'error')
+    } finally {
+        window.fileManager.hideLoading()
     }
 }
 
@@ -313,5 +379,13 @@ document.addEventListener('DOMContentLoaded', () => {
 window.addEventListener('beforeunload', () => {
     if (window.fileManager) {
         window.fileManager.cleanup()
+    }
+})
+
+// Add visibility change handler to refresh when tab becomes visible
+document.addEventListener('visibilitychange', () => {
+    if (!document.hidden && window.fileManager) {
+        // Refresh files when tab becomes visible (helps with cache issues)
+        window.fileManager.refreshFilesList(true)
     }
 })

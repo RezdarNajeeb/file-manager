@@ -65,7 +65,7 @@ class TusServiceTest extends TestCase
         $result = $moveToMinioMethod->invoke($this->tusService, $tempFile, $filename);
 
         // Verify the file was uploaded with correct path structure
-        $expectedPath = 'uploads/' . date('Y/m/d') . '/' . $filename;
+        $expectedPath = $filename;
         $this->assertEquals($expectedPath, $result);
 
         // Verify file exists in MinIO

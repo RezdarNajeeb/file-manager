@@ -200,9 +200,11 @@ class TusService
             $disk = Storage::disk('minio');
 
             // Check if bucket exists by trying to list files
-            $disk->files('test');
+            // If no files exist in the test directory, we'll consider bucket as not existing
+            $files = $disk->files('test');
 
-            return true;
+            // Return true only if there are files in the test directory
+            return count($files) > 0;
         } catch (\Exception $e) {
             // If listing fails, bucket might not exist
             // MinIO will create bucket automatically when first file is uploaded

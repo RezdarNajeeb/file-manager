@@ -24,6 +24,7 @@ class FileController extends Controller
     public function index()
     {
         $files = FileUpload::orderBy('created_at', 'desc')->paginate(20);
+
         return view('files.index', compact('files'));
     }
 
@@ -42,7 +43,7 @@ class FileController extends Controller
     {
         $fileUpload = FileUpload::where('tus_id', $tusId)->first();
 
-        if (!$fileUpload) {
+        if (! $fileUpload) {
             return response()->json(['error' => 'Upload not found'], 404);
         }
 
@@ -64,13 +65,13 @@ class FileController extends Controller
      */
     public function download(Request $request, FileUpload $fileUpload)
     {
-        if (!$fileUpload->isCompleted()) {
+        if (! $fileUpload->isCompleted()) {
             abort(404, 'File not found or upload not completed');
         }
 
         $disk = Storage::disk('minio');
 
-        if (!$disk->exists($fileUpload->path)) {
+        if (! $disk->exists($fileUpload->path)) {
             abort(404, 'File not found in storage');
         }
 
@@ -91,7 +92,7 @@ class FileController extends Controller
             $range = $request->header('Range');
             if (preg_match('/bytes=(\d+)-(\d*)/', $range, $matches)) {
                 $start = intval($matches[1]);
-                if (!empty($matches[2])) {
+                if (! empty($matches[2])) {
                     $end = intval($matches[2]);
                 }
             }
@@ -102,7 +103,7 @@ class FileController extends Controller
         $headers = [
             'Content-Type' => $fileUpload->mime_type,
             'Content-Length' => $length,
-            'Content-Disposition' => 'attachment; filename="' . $fileUpload->original_filename . '"',
+            'Content-Disposition' => 'attachment; filename="'.$fileUpload->original_filename.'"',
             'Accept-Ranges' => 'bytes',
             'Content-Range' => "bytes $start-$end/$size",
         ];
@@ -119,7 +120,7 @@ class FileController extends Controller
             $bytesRemaining = $length;
             $chunkSize = 8192; // 8KB chunks
 
-            while ($bytesRemaining > 0 && !feof($stream)) {
+            while ($bytesRemaining > 0 && ! feof($stream)) {
                 $bytesToRead = min($chunkSize, $bytesRemaining);
                 $chunk = fread($stream, $bytesToRead);
 

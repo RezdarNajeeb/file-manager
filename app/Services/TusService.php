@@ -3,11 +3,11 @@
 namespace App\Services;
 
 use App\Models\FileUpload;
-use TusPhp\Tus\Server as TusServer;
-use TusPhp\Cache\FileStore;
-use TusPhp\Events\TusEvent;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use TusPhp\Cache\FileStore;
+use TusPhp\Events\TusEvent;
+use TusPhp\Tus\Server as TusServer;
 
 class TusService
 {
@@ -15,7 +15,7 @@ class TusService
 
     public function __construct()
     {
-        $this->server = new TusServer();
+        $this->server = new TusServer;
         $this->setupTusServer();
     }
 
@@ -50,7 +50,7 @@ class TusService
             $mimeType = $metadata['filetype'] ?? 'application/octet-stream';
 
             FileUpload::create([
-                'filename' => Str::uuid() . '_' . $originalFilename,
+                'filename' => Str::uuid().'_'.$originalFilename,
                 'original_filename' => $originalFilename,
                 'mime_type' => $mimeType,
                 'file_size' => $fileMeta['size'],
@@ -98,10 +98,10 @@ class TusService
                         unlink($uploadedFilePath);
                     }
 
-                    \Log::info("File upload completed successfully", [
+                    \Log::info('File upload completed successfully', [
                         'tus_id' => $tusId,
                         'filename' => $fileUpload->filename,
-                        'minio_path' => $minioPath
+                        'minio_path' => $minioPath,
                     ]);
                 } catch (\Exception $e) {
                     // Mark upload as failed if MinIO upload fails
@@ -109,11 +109,11 @@ class TusService
                         'status' => 'failed',
                     ]);
 
-                    \Log::error("File upload failed during MinIO transfer", [
+                    \Log::error('File upload failed during MinIO transfer', [
                         'tus_id' => $tusId,
                         'filename' => $fileUpload->filename,
                         'local_path' => $uploadedFilePath,
-                        'error' => $e->getMessage()
+                        'error' => $e->getMessage(),
                     ]);
 
                     // Don't clean up the temporary file if MinIO upload failed
@@ -125,11 +125,11 @@ class TusService
 
     private function moveToMinio(string $localPath, string $filename): string
     {
-        $minioPath = 'uploads/' . date('Y/m/d') . '/' . $filename;
+        $minioPath = 'uploads/'.date('Y/m/d').'/'.$filename;
 
         try {
             // Check if local file exists
-            if (!file_exists($localPath)) {
+            if (! file_exists($localPath)) {
                 throw new \Exception("Local file not found: {$localPath}");
             }
 
@@ -142,30 +142,30 @@ class TusService
             // Upload to MinIO
             $result = Storage::disk('minio')->put($minioPath, $fileContents);
 
-            if (!$result) {
-                throw new \Exception("Failed to upload file to MinIO bucket");
+            if (! $result) {
+                throw new \Exception('Failed to upload file to MinIO bucket');
             }
 
             // Verify the file was uploaded successfully
-            if (!Storage::disk('minio')->exists($minioPath)) {
-                throw new \Exception("File upload to MinIO succeeded but file verification failed");
+            if (! Storage::disk('minio')->exists($minioPath)) {
+                throw new \Exception('File upload to MinIO succeeded but file verification failed');
             }
 
-            \Log::info("File successfully uploaded to MinIO", [
+            \Log::info('File successfully uploaded to MinIO', [
                 'local_path' => $localPath,
                 'minio_path' => $minioPath,
-                'filename' => $filename
+                'filename' => $filename,
             ]);
 
             return $minioPath;
 
         } catch (\Exception $e) {
-            \Log::error("Failed to upload file to MinIO", [
+            \Log::error('Failed to upload file to MinIO', [
                 'local_path' => $localPath,
                 'minio_path' => $minioPath,
                 'filename' => $filename,
                 'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString()
+                'trace' => $e->getTraceAsString(),
             ]);
 
             // Re-throw the exception so the calling code can handle it
@@ -184,8 +184,8 @@ class TusService
             $response = $this->server->serve();
             $response->send();
         } catch (\Exception $e) {
-            \Log::error('TUS Server Error: ' . $e->getMessage(), [
-                'trace' => $e->getTraceAsString()
+            \Log::error('TUS Server Error: '.$e->getMessage(), [
+                'trace' => $e->getTraceAsString(),
             ]);
 
             http_response_code(500);
@@ -201,6 +201,7 @@ class TusService
 
             // Check if bucket exists by trying to list files
             $disk->files('test');
+
             return true;
         } catch (\Exception $e) {
             // If listing fails, bucket might not exist

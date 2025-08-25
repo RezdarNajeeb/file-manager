@@ -36,7 +36,7 @@ class SyncFilesWithBucket extends Command
 
         // Add new files from bucket to DB
         foreach ($bucketFiles as $bucketFile) {
-            if (!in_array($bucketFile, $dbFiles)) {
+            if (! in_array($bucketFile, $dbFiles)) {
                 $this->info("Found new file: {$bucketFile}");
                 FileUpload::create([
                     'filename' => $bucketFile,
@@ -45,7 +45,7 @@ class SyncFilesWithBucket extends Command
                     'file_size' => $disk->size($bucketFile),
                     'mime_type' => $disk->mimeType($bucketFile),
                     'status' => 'completed',
-                    'tus_id' => 'manual-' . uniqid(),
+                    'tus_id' => 'manual-'.uniqid(),
                 ]);
                 $this->info("Added file {$bucketFile} to database.");
             }
@@ -54,7 +54,7 @@ class SyncFilesWithBucket extends Command
         // Remove files from DB that are not in the bucket
         $dbFileRecords = FileUpload::all();
         foreach ($dbFileRecords as $dbFileRecord) {
-            if (!in_array($dbFileRecord->path, $bucketFiles)) {
+            if (! in_array($dbFileRecord->path, $bucketFiles)) {
                 $this->info("File not found in bucket, deleting from database: {$dbFileRecord->path}");
                 $dbFileRecord->delete();
             }

@@ -344,4 +344,4 @@ For issues and questions:
 
 ---
 
-Built with ❤️ using Laravel, TUS Protocol, and MinIO
+<center>Built with ❤️ using Laravel, TUS Protocol, and MinIO</center>
